@@ -34,6 +34,9 @@ func _run() -> void:
 		fail("Ready Market order should have an enabled Trade button")
 		return
 
+	panel._on_next_order_pressed()
+	await process_frame
+
 	var potion_status := _find_label(panel, "MarketOrderStatus_potion_crate")
 	if potion_status == null or potion_status.text != "Need 1 Mana Potion.":
 		fail("Blocked potion order should list missing Mana Potions")
@@ -44,6 +47,12 @@ func _run() -> void:
 		fail("Blocked potion order should show disabled Need More button")
 		return
 
+	panel._on_previous_order_pressed()
+	await process_frame
+	mana_button = _find_button(panel, "TradeButton_mana_bundle")
+	if mana_button == null:
+		fail("Mana bundle order should be visible again after paging back")
+		return
 	mana_button.pressed.emit()
 	await process_frame
 	if game_state.total_coins != 35:

@@ -81,7 +81,7 @@ func _prepare_bound_scene_layout() -> void:
 	var stat_cards := [
 		{"Path": "Root/Stats/PondBeautyCard", "Title": "Pond Beauty"},
 		{"Path": "Root/Stats/ManaCard", "Title": "Mana"},
-		{"Path": "Root/Stats/DecorationBonusCard", "Title": "Decor Bonus"}
+		{"Path": "Root/Stats/DecorationBonusCard", "Title": "Decoration Bonus"}
 	]
 	for card_data in stat_cards:
 		var card := get_node_or_null(String(card_data.get("Path"))) as Control
@@ -192,7 +192,7 @@ func _build_ui() -> void:
 
 	_build_stat_card(root, "Pond Beauty", "pond_beauty", Vector2(56, 186), Vector2(300, 116))
 	_build_stat_card(root, "Mana", "mana", Vector2(390, 186), Vector2(300, 116))
-	_build_stat_card(root, "Decor Bonus", "decoration_bonus", Vector2(724, 186), Vector2(300, 116))
+	_build_stat_card(root, "Decoration Bonus", "decoration_bonus", Vector2(724, 186), Vector2(300, 116))
 
 	pond_layer = Control.new()
 	pond_layer.position = Vector2.ZERO
@@ -677,6 +677,12 @@ func _decoration_size(decoration_name: String) -> Vector2:
 		return Vector2(126, 180)
 	if decoration_name == "Willow Arch":
 		return Vector2(160, 188)
+	if decoration_name == "Gold Koi":
+		return Vector2(138, 96)
+	if decoration_name == "Blue Koi":
+		return Vector2(130, 92)
+	if decoration_name == "Pink Koi":
+		return Vector2(134, 94)
 	return Vector2(120, 120)
 
 
@@ -705,6 +711,12 @@ func _decoration_sprite_path(decoration_name: String) -> String:
 		return "res://assets/sprites/environment/reed_cluster.png"
 	if decoration_name == "Willow Arch":
 		return "res://assets/sprites/environment/willow_arch.png"
+	if decoration_name == "Gold Koi":
+		return "res://assets/sprites/characters/koi_gold.png"
+	if decoration_name == "Blue Koi":
+		return "res://assets/sprites/characters/koi_blue.png"
+	if decoration_name == "Pink Koi":
+		return "res://assets/sprites/characters/koi_pink.png"
 	return "res://assets/sprites/effects/glow_orb.png"
 
 
@@ -733,6 +745,12 @@ func _decoration_display_name(decoration_name: String) -> String:
 		return "Reed\nCluster"
 	if decoration_name == "Willow Arch":
 		return "Willow\nArch"
+	if decoration_name == "Gold Koi":
+		return "Gold\nKoi"
+	if decoration_name == "Blue Koi":
+		return "Blue\nKoi"
+	if decoration_name == "Pink Koi":
+		return "Pink\nKoi"
 	return decoration_name
 
 

@@ -119,6 +119,7 @@ var market_reputation: int = 1
 var market_orders_completed: int = 0
 var inventory_notes: Array[String] = []
 var ancient_tree_level: int = 1
+var ancient_tree_growth: int = 15
 var ancient_tree_restore_cost: int = 75
 var ancient_tree_claimed_rewards: Array[int] = []
 var ancient_tree_experience: int = 0
@@ -150,6 +151,7 @@ func _process(delta: float) -> void:
 	generate_flower_mana(delta)
 	update_fairy_tasks(delta)
 	update_potion_crafting(delta)
+	update_exploration(delta)
 
 
 func generate_flower_mana(delta: float) -> void:
@@ -414,7 +416,6 @@ func restore_sacred_pond() -> bool:
 	sacred_pond_water_purity = min(sacred_pond_water_purity + get_sacred_pond_total_restore_amount(), 100)
 	sacred_pond_spirit_energy += 10 + get_sun_koi_guardian_spirit_bonus()
 	sacred_pond_restore_cost = int(ceil(float(sacred_pond_restore_cost) * 1.25))
-	grove_restoration = sacred_pond_water_purity
 	update_sacred_pond_level_and_rewards()
 	add_quest_progress(QUEST_GOAL_RESTORE_POND, 1)
 
@@ -1009,13 +1010,13 @@ func fulfill_market_order(order_id: String) -> Dictionary:
 
 
 func update_ancient_tree_level() -> void:
-	if grove_restoration >= 100:
+	if ancient_tree_growth >= 100:
 		ancient_tree_level = 5
-	elif grove_restoration >= 75:
+	elif ancient_tree_growth >= 75:
 		ancient_tree_level = 4
-	elif grove_restoration >= 50:
+	elif ancient_tree_growth >= 50:
 		ancient_tree_level = 3
-	elif grove_restoration >= 25:
+	elif ancient_tree_growth >= 25:
 		ancient_tree_level = 2
 	else:
 		ancient_tree_level = 1
@@ -1033,7 +1034,12 @@ func water_ancient_tree() -> Dictionary:
 		save_status_changed.emit(blocked_message)
 		return {"Success": false, "Message": blocked_message, "RewardText": ""}
 
+	var previous_level := ancient_tree_level
 	ancient_tree_water_timestamps.append(_get_now_unix())
+	ancient_tree_growth = min(100, ancient_tree_growth + 10)
+	update_ancient_tree_level()
+	if previous_level < 2 and ancient_tree_level >= 2:
+		add_quest_progress(QUEST_GOAL_RESTORE_TREE, 1)
 	var watering_reward := _grant_ancient_tree_watering_reward()
 	resources_changed.emit()
 	inventory_changed.emit()
@@ -1053,6 +1059,7 @@ func water_ancient_tree() -> Dictionary:
 		"RewardType": String(watering_reward.get("Type", "")),
 		"RewardAmount": int(watering_reward.get("Amount", 0)),
 		"RewardText": reward_text,
+		"Growth": ancient_tree_growth,
 		"RemainingWaters": remaining
 	}
 
@@ -1288,7 +1295,6 @@ func update_sacred_pond_level_and_rewards() -> void:
 		_unlock_pond_reward(POND_BONUS_SUN_KOI_GUARDIAN)
 
 	active_pond_bonus = _get_highest_active_pond_bonus()
-	grove_restoration = sacred_pond_water_purity
 
 
 func _unlock_pond_reward(reward_name: String) -> void:
@@ -2584,6 +2590,7 @@ func get_save_data() -> Dictionary:
 		"market_orders_completed": market_orders_completed,
 		"inventory_notes": inventory_notes,
 		"ancient_tree_level": ancient_tree_level,
+		"ancient_tree_growth": ancient_tree_growth,
 		"ancient_tree_restore_cost": ancient_tree_restore_cost,
 		"ancient_tree_claimed_rewards": ancient_tree_claimed_rewards,
 		"ancient_tree_experience": ancient_tree_experience,
@@ -2600,8 +2607,12 @@ func get_save_data() -> Dictionary:
 		"has_seen_tutorial": has_seen_tutorial,
 		"tutorial_step": tutorial_step,
 		"music_volume": music_volume,
-		"sfx_volume": sfx_volume
+		"sfx_volume": sfx_volume,
+		"exploration_active": exploration_active,
+		"exploration_location_id": exploration_location_id,
+		"exploration_end_unix": exploration_end_unix
 	}
+	
 
 
 func apply_save_data(data: Dictionary) -> void:
@@ -2669,6 +2680,7 @@ func apply_save_data(data: Dictionary) -> void:
 					var imported_position := get_pond_decoration_normalized_position(pond_decorations[imported_index])
 					pond_decorations[imported_index]["PositionX"] = imported_position.x
 					pond_decorations[imported_index]["PositionY"] = imported_position.y
+		_add_missing_default_pond_decorations()
 	var saved_slots = data.get("pond_decoration_slots", [])
 	if saved_slots is Array and saved_slots.size() > 0:
 		pond_decoration_slots.clear()
@@ -2725,6 +2737,8 @@ func apply_save_data(data: Dictionary) -> void:
 	if inventory_notes.is_empty():
 		inventory_notes.append("Inventory unlocked")
 	ancient_tree_level = int(data.get("ancient_tree_level", 1))
+	ancient_tree_growth = int(data.get("ancient_tree_growth", data.get("grove_restoration", 15)))
+	update_ancient_tree_level()
 	ancient_tree_restore_cost = int(data.get("ancient_tree_restore_cost", 75))
 	ancient_tree_claimed_rewards.clear()
 	ancient_tree_experience = int(data.get("ancient_tree_experience", 0))
@@ -2777,6 +2791,10 @@ func apply_save_data(data: Dictionary) -> void:
 	tutorial_step = int(data.get("tutorial_step", 0))
 	music_volume = clamp(float(data.get("music_volume", 0.75)), 0.0, 1.0)
 	sfx_volume = clamp(float(data.get("sfx_volume", 0.75)), 0.0, 1.0)
+	
+	exploration_active = bool(data.get("exploration_active", false))
+	exploration_location_id = String(data.get("exploration_location_id", ""))
+	exploration_end_unix = int(data.get("exploration_end_unix", 0))
 
 	resources_changed.emit()
 	flower_grove_changed.emit()
@@ -2903,6 +2921,7 @@ func reset_to_defaults() -> void:
 	inventory_notes.clear()
 	inventory_notes.append("Inventory unlocked")
 	ancient_tree_level = 1
+	ancient_tree_growth = 15
 	ancient_tree_restore_cost = 75
 	ancient_tree_claimed_rewards.clear()
 	ancient_tree_experience = 0
@@ -2920,6 +2939,9 @@ func reset_to_defaults() -> void:
 	tutorial_step = 0
 	music_volume = 0.75
 	sfx_volume = 0.75
+	exploration_active = false
+	exploration_location_id = ""
+	exploration_end_unix = 0
 	resources_changed.emit()
 	flower_grove_changed.emit()
 	sacred_pond_changed.emit()
@@ -2978,7 +3000,37 @@ func _reset_pond_decorations_to_defaults() -> void:
 	pond_decorations.append(_make_pond_decoration("Flame Basin", 70, 11))
 	pond_decorations.append(_make_pond_decoration("Reed Cluster", 35, 6))
 	pond_decorations.append(_make_pond_decoration("Willow Arch", 100, 18))
+	pond_decorations.append(_make_pond_decoration("Gold Koi", 85, 14))
+	pond_decorations.append(_make_pond_decoration("Blue Koi", 85, 14))
+	pond_decorations.append(_make_pond_decoration("Pink Koi", 95, 16))
 	recalculate_pond_beauty()
+
+
+func _add_missing_default_pond_decorations() -> void:
+	var current_names := {}
+	for decoration in pond_decorations:
+		current_names[String(decoration.get("DecorationName", ""))] = true
+	var defaults := [
+		_make_pond_decoration("Moon Lantern", 25, 5),
+		_make_pond_decoration("Spirit Stone", 40, 8),
+		_make_pond_decoration("Bloom Lilypad", 30, 6),
+		_make_pond_decoration("Sacred Bridge", 75, 12),
+		_make_pond_decoration("Crystal Lotus", 90, 16),
+		_make_pond_decoration("Stone Koi Statue", 60, 10),
+		_make_pond_decoration("Crystal Pillar", 80, 14),
+		_make_pond_decoration("Moonstone Steps", 45, 7),
+		_make_pond_decoration("Fern Spring", 55, 9),
+		_make_pond_decoration("Flame Basin", 70, 11),
+		_make_pond_decoration("Reed Cluster", 35, 6),
+		_make_pond_decoration("Willow Arch", 100, 18),
+		_make_pond_decoration("Gold Koi", 85, 14),
+		_make_pond_decoration("Blue Koi", 85, 14),
+		_make_pond_decoration("Pink Koi", 95, 16)
+	]
+	for decoration in defaults:
+		var decoration_name := String(decoration.get("DecorationName", ""))
+		if not current_names.has(decoration_name):
+			pond_decorations.append(decoration)
 
 
 func _reset_flower_grid_to_defaults() -> void:
@@ -3041,7 +3093,7 @@ func get_exploration_data(location_id: String) -> Dictionary:
 				"Name": "Moonlit Clearing",
 				"UnlockLevel": 6,
 				"CostMana": 300,
-				"DurationSeconds": 1800,
+				"DurationSeconds": 180,
 				"RewardCoinsMin": 500,
 				"RewardCoinsMax": 1000
 			}
@@ -3077,11 +3129,17 @@ func is_exploration_unlocked(location_id: String) -> bool:
 		return false
 	return get_exploration_gate_level() >= int(data.get("UnlockLevel", 999))
 
+var exploration_active: bool = false
+var exploration_location_id: String = ""
+var exploration_end_unix: int = 0
+
 
 func start_exploration(location_id: String) -> Dictionary:
 	var data := get_exploration_data(location_id)
 	if data.is_empty():
 		return {"Success": false, "Message": "Unknown location."}
+	if exploration_active:
+		return {"Success": false, "Message": "An exploration is already underway."}
 	if not is_exploration_unlocked(location_id):
 		var needed := int(data.get("UnlockLevel", 0))
 		return {"Success": false, "Message": "Locked. Needs Flower Grove and Potion Shop at level %d." % needed}
@@ -3090,10 +3148,67 @@ func start_exploration(location_id: String) -> Dictionary:
 		return {"Success": false, "Message": "Not enough Mana."}
 
 	total_mana -= cost
+	exploration_active = true
+	exploration_location_id = location_id
+	exploration_end_unix = int(Time.get_unix_time_from_system()) + int(data.get("DurationSeconds", 60))
 	resources_changed.emit()
 	save_game()
-	
 	return {"Success": true, "Message": "Exploring %s..." % String(data.get("Name", "location"))}
+
+
+func update_exploration(_delta: float) -> void:
+	# Time remaining is worked out from the system clock, so there is nothing to
+	# count down here. This is kept so the _process hook above stays valid.
+	pass
+
+
+func get_exploration_time_remaining() -> int:
+	if not exploration_active:
+		return 0
+	return max(0, exploration_end_unix - int(Time.get_unix_time_from_system()))
+
+
+func is_exploration_ready() -> bool:
+	return exploration_active and get_exploration_time_remaining() <= 0
+
+
+func get_active_exploration_name() -> String:
+	if not exploration_active:
+		return ""
+	return String(get_exploration_data(exploration_location_id).get("Name", "the wilds"))
+
+
+func clear_exploration() -> void:
+	exploration_active = false
+	exploration_location_id = ""
+	exploration_end_unix = 0
+
+
+func claim_exploration_reward() -> Dictionary:
+	if not exploration_active:
+		return {"Success": false, "Message": "No exploration underway."}
+	if get_exploration_time_remaining() > 0:
+		return {"Success": false, "Message": "The fairies are still exploring."}
+
+	var data := get_exploration_data(exploration_location_id)
+	if data.is_empty():
+		clear_exploration()
+		save_game()
+		return {"Success": false, "Message": "That exploration is no longer available."}
+
+	var reward_min := int(data.get("RewardCoinsMin", 0))
+	var reward_max := int(data.get("RewardCoinsMax", reward_min))
+	var reward := reward_min
+	if reward_max > reward_min:
+		reward = randi_range(reward_min, reward_max)
+
+	total_coins += reward
+	var location_name := String(data.get("Name", "the grove"))
+	clear_exploration()
+
+	resources_changed.emit()
+	save_game()
+	return {"Success": true, "Message": "The fairies returned from %s with %d Coins!" % [location_name, reward], "Reward": reward}
 
 
 func _get_sound_manager() -> Node:

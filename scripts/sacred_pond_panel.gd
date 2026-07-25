@@ -411,8 +411,9 @@ func _refresh() -> void:
 	if purity_progress:
 		purity_progress.value = GameState.sacred_pond_water_purity
 	if bonus_summary_label:
-		bonus_summary_label.text = "Status: %s    Restore +%d%% for %d Mana\n%s    Next: %s" % [
+		bonus_summary_label.text = "Status: %s    Decoration Bonus +%d%%    Restore +%d%% for %d Mana\n%s    Next: %s" % [
 			completion_text,
+			GameState.get_pond_decoration_restore_bonus(),
 			GameState.get_sacred_pond_total_restore_amount(),
 			GameState.sacred_pond_restore_cost,
 			GameState.get_active_pond_bonus_text(),
@@ -493,6 +494,12 @@ func _pond_decoration_sprite_path(decoration_name: String) -> String:
 		return "res://assets/sprites/environment/reed_cluster.png"
 	if decoration_name == "Willow Arch":
 		return "res://assets/sprites/environment/willow_arch.png"
+	if decoration_name == "Gold Koi":
+		return "res://assets/sprites/characters/koi_gold.png"
+	if decoration_name == "Blue Koi":
+		return "res://assets/sprites/characters/koi_blue.png"
+	if decoration_name == "Pink Koi":
+		return "res://assets/sprites/characters/koi_pink.png"
 	return "res://assets/sprites/effects/glow_orb.png"
 
 
@@ -521,6 +528,12 @@ func _pond_decoration_preview_size(decoration_name: String) -> Vector2:
 		return Vector2(118, 170)
 	if decoration_name == "Willow Arch":
 		return Vector2(154, 180)
+	if decoration_name == "Gold Koi":
+		return Vector2(132, 94)
+	if decoration_name == "Blue Koi":
+		return Vector2(124, 88)
+	if decoration_name == "Pink Koi":
+		return Vector2(128, 90)
 	return Vector2(108, 108)
 
 

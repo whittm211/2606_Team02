@@ -60,7 +60,7 @@ func _refresh() -> void:
 	mana_value_label.text = str(GameState.total_mana)
 	potions_value_label.text = str(GameState.mana_potion_count)
 
-	var growth := GameState.grove_restoration
+	var growth := GameState.ancient_tree_growth
 	_update_growth_background(growth)
 	growth_value_label.text = "%d%%" % growth
 	growth_caption_label.text = "GROWTH"

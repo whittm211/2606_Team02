@@ -34,6 +34,9 @@ func _run() -> void:
 		fail("Affordable Forge upgrade should have an enabled Forge button")
 		return
 
+	panel._on_next_upgrade_pressed()
+	await process_frame
+
 	var potion_status := _find_label(panel, "ForgeUpgradeStatus_potion_gilding")
 	if potion_status == null or potion_status.text != "Need 50 Coins.":
 		fail("Blocked Forge upgrade should list missing Coins")
@@ -44,9 +47,16 @@ func _run() -> void:
 		fail("Blocked Forge upgrade should show disabled Need More button")
 		return
 
+	panel._on_previous_upgrade_pressed()
+	await process_frame
+
 	var flower_effect := _find_label(panel, "ForgeUpgradeEffect_flower_focus")
 	if flower_effect == null or not flower_effect.text.contains("Flower Grove Mana/sec"):
 		fail("Forge upgrade should describe the effect before purchase")
+		return
+	flower_button = _find_button(panel, "ForgeButton_flower_focus")
+	if flower_button == null or flower_button.disabled:
+		fail("Affordable Forge upgrade should still be available after paging")
 		return
 
 	flower_button.pressed.emit()

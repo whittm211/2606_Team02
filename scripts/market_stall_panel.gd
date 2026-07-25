@@ -15,10 +15,12 @@ const TAB_CARDS := {
 var active_tab := "Trade"
 var stats_label: Label
 var level_label: Label
-var content_scroll: ScrollContainer
 var content_stack: VBoxContainer
 var feedback_label: Label
 var card_buttons: Dictionary = {}
+var current_order_index := 0
+var previous_order_button: Button
+var next_order_button: Button
 
 
 func _ready() -> void:
@@ -37,6 +39,7 @@ func _build_panel() -> void:
 	_add_title_header()
 	_add_mode_panel()
 	_add_bottom_tabs()
+	_add_order_pager_buttons()
 
 
 func _add_background() -> void:
@@ -99,21 +102,11 @@ func _add_mode_panel() -> void:
 	margin.add_child(panel)
 	var pad := _make_margin(22, 22, 16, 16)
 	panel.add_child(pad)
-	content_scroll = ScrollContainer.new()
-	content_scroll.name = "MarketOrderScroll"
-	content_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	content_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	content_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	content_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	content_scroll.follow_focus = true
-	content_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
-	pad.add_child(content_scroll)
 	content_stack = VBoxContainer.new()
 	content_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content_stack.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	content_stack.add_theme_constant_override("separation", 10)
-	content_stack.gui_input.connect(_on_content_scroll_input)
-	content_scroll.add_child(content_stack)
+	pad.add_child(content_stack)
 
 
 func _add_bottom_tabs() -> void:
@@ -178,12 +171,16 @@ func _refresh() -> void:
 	match active_tab:
 		"Trade", "Orders":
 			_add_banner("Fill village orders to earn Coins and reputation.")
-			for order_id in ORDER_IDS:
-				content_stack.add_child(_make_order_card(GameState.get_market_order_data(order_id)))
+			current_order_index = clampi(current_order_index, 0, ORDER_IDS.size() - 1)
+			_add_page_indicator(current_order_index + 1, ORDER_IDS.size(), Color("#99e8ac"))
+			var order_id := String(ORDER_IDS[current_order_index])
+			content_stack.add_child(_make_order_card(GameState.get_market_order_data(order_id)))
 		"Upgrades":
-			_add_banner("Upgrade routes unlock through the Arcane Forge. Market trades fund those village improvements.")
+			_add_banner("Market reputation unlocks better routes and funds Forge work.")
+			_add_market_progress_card()
 		"Storage":
-			_add_banner("Storage currently holds Mana Potions and trade goods. Potions available: %d." % GameState.mana_potion_count)
+			_add_banner("Stored trade goods ready for village orders.")
+			_add_market_storage_card()
 
 	feedback_label = _make_label("", 24, Color("#99e8ac"), HORIZONTAL_ALIGNMENT_CENTER)
 	content_stack.add_child(feedback_label)
@@ -191,6 +188,9 @@ func _refresh() -> void:
 	for tab_name in card_buttons.keys():
 		var border := (card_buttons[tab_name] as Control).get_node("ActiveBorder") as PanelContainer
 		border.visible = tab_name == active_tab
+	var show_pager := active_tab in ["Trade", "Orders"] and ORDER_IDS.size() > 1
+	previous_order_button.visible = show_pager
+	next_order_button.visible = show_pager
 
 
 func _add_banner(text: String) -> void:
@@ -199,13 +199,102 @@ func _add_banner(text: String) -> void:
 	content_stack.add_child(label)
 
 
+func _add_page_indicator(current_page: int, page_count: int, color: Color) -> void:
+	var label := _make_label("%d / %d" % [current_page, page_count], 17, color, HORIZONTAL_ALIGNMENT_CENTER)
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	content_stack.add_child(label)
+
+
+func _add_market_progress_card() -> void:
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", _make_panel_style(Color(0.060, 0.036, 0.022, 0.74), Color("#e9c46a"), 2, 10))
+	var margin := _make_margin(16, 16, 12, 12)
+	card.add_child(margin)
+	var stack := VBoxContainer.new()
+	stack.add_theme_constant_override("separation", 8)
+	margin.add_child(stack)
+	stack.add_child(_make_market_row("Reputation", str(GameState.market_reputation), "Raises village trust."))
+	stack.add_child(_make_market_row("Orders Completed", str(GameState.market_orders_completed), _get_market_rank_text()))
+	stack.add_child(_make_market_row("Best Next Trade", _get_best_market_order_title(), _get_best_market_order_hint()))
+	content_stack.add_child(card)
+
+
+func _add_market_storage_card() -> void:
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", _make_panel_style(Color(0.060, 0.036, 0.022, 0.74), Color("#c9954e"), 2, 10))
+	var margin := _make_margin(16, 16, 12, 12)
+	card.add_child(margin)
+	var stack := VBoxContainer.new()
+	stack.add_theme_constant_override("separation", 8)
+	margin.add_child(stack)
+	stack.add_child(_make_market_row("Mana", str(GameState.total_mana), "Used for Mana Bundle trades."))
+	stack.add_child(_make_market_row("Mana Potions", str(GameState.mana_potion_count), "Used for Potion Crate trades."))
+	stack.add_child(_make_market_row("Spirit Energy", str(GameState.sacred_pond_spirit_energy), "Used for Spirit Contract trades."))
+	content_stack.add_child(card)
+
+
+func _make_market_row(label_text: String, value_text: String, detail_text: String) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	var left := VBoxContainer.new()
+	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(left)
+	left.add_child(_make_label(label_text, 17, Color("#ffe7af")))
+	var detail := _make_label(detail_text, 14, Color("#f0ddbd"))
+	detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	left.add_child(detail)
+	var value := _make_label(value_text, 22, Color("#99e8ac"), HORIZONTAL_ALIGNMENT_RIGHT)
+	value.custom_minimum_size = Vector2(130, 1)
+	value.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(value)
+	return row
+
+
+func _get_market_rank_text() -> String:
+	if GameState.market_orders_completed >= 15:
+		return "Master trader tier reached."
+	if GameState.market_orders_completed >= 5:
+		return "Trusted route tier active. Push toward master contracts."
+	return "Complete 5 orders to feel like a trusted village trader."
+
+
+func _get_best_market_order_title() -> String:
+	var best := _get_best_market_order()
+	return String(best.get("Title", "Mana Bundle"))
+
+
+func _get_best_market_order_hint() -> String:
+	var best := _get_best_market_order()
+	if _can_fulfill_order(best):
+		return "Ready now. Trade it for %d Coins." % int(best.get("RewardCoins", 0))
+	return _format_order_status(best)
+
+
+func _get_best_market_order() -> Dictionary:
+	var best: Dictionary = {}
+	var best_reward := -1
+	for order_id in ORDER_IDS:
+		var order := GameState.get_market_order_data(String(order_id))
+		var reward := int(order.get("RewardCoins", 0))
+		if _can_fulfill_order(order) and reward > best_reward:
+			best_reward = reward
+			best = order
+	if not best.is_empty():
+		return best
+	for order_id in ORDER_IDS:
+		var order := GameState.get_market_order_data(String(order_id))
+		var reward := int(order.get("RewardCoins", 0))
+		if reward > best_reward:
+			best_reward = reward
+			best = order
+	return best
+
+
 func _make_order_card(order: Dictionary) -> PanelContainer:
 	var card := PanelContainer.new()
 	var order_id := String(order.get("OrderID", ""))
 	var can_trade := _can_fulfill_order(order)
 	card.name = "MarketOrderCard_%s" % order_id
-	card.mouse_filter = Control.MOUSE_FILTER_PASS
-	card.gui_input.connect(_on_content_scroll_input)
 	card.add_theme_stylebox_override("panel", _make_order_card_style(can_trade))
 	var margin := _make_margin(14, 14, 10, 10)
 	card.add_child(margin)
@@ -327,6 +416,44 @@ func _on_order_pressed(order_id: String) -> void:
 	var result: Dictionary = GameState.fulfill_market_order(order_id)
 	if feedback_label:
 		feedback_label.text = String(result.get("Message", ""))
+		_refresh()
+
+
+func _add_order_pager_buttons() -> void:
+	previous_order_button = _make_pager_button("^")
+	previous_order_button.position = Vector2(435, 1232)
+	previous_order_button.pressed.connect(_on_previous_order_pressed)
+	add_child(previous_order_button)
+
+	next_order_button = _make_pager_button("v")
+	next_order_button.position = Vector2(435, 1556)
+	next_order_button.pressed.connect(_on_next_order_pressed)
+	add_child(next_order_button)
+
+
+func _make_pager_button(text: String) -> Button:
+	var button := _make_button(text)
+	button.size = Vector2(210, 50)
+	button.custom_minimum_size = Vector2(210, 50)
+	button.z_index = 80
+	button.mouse_filter = Control.MOUSE_FILTER_STOP
+	button.focus_mode = Control.FOCUS_NONE
+	return button
+
+
+func _on_previous_order_pressed() -> void:
+	_change_order_page(-1)
+
+
+func _on_next_order_pressed() -> void:
+	_change_order_page(1)
+
+
+func _change_order_page(direction: int) -> void:
+	SoundManager.play_click()
+	if ORDER_IDS.is_empty():
+		return
+	current_order_index = (current_order_index + direction + ORDER_IDS.size()) % ORDER_IDS.size()
 	_refresh()
 
 
@@ -336,20 +463,9 @@ func _on_back_pressed() -> void:
 	closed.emit()
 
 
-func _on_content_scroll_input(event: InputEvent) -> void:
-	if content_scroll == null:
-		return
-	if event is InputEventMouseButton and event.pressed:
-		if event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			content_scroll.scroll_vertical += 90
-			get_viewport().set_input_as_handled()
-		elif event.button_index == MOUSE_BUTTON_WHEEL_UP:
-			content_scroll.scroll_vertical = maxi(0, content_scroll.scroll_vertical - 90)
-			get_viewport().set_input_as_handled()
-
-
 func _clear_content() -> void:
 	for child in content_stack.get_children():
+		content_stack.remove_child(child)
 		child.queue_free()
 
 

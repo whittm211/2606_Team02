@@ -17,9 +17,11 @@ var stats_label: Label
 var title_label: Label
 var mode_label: Label
 var feedback_label: Label
-var content_scroll: ScrollContainer
 var content_stack: VBoxContainer
 var card_buttons: Dictionary = {}
+var current_upgrade_index := 0
+var previous_upgrade_button: Button
+var next_upgrade_button: Button
 
 
 func _ready() -> void:
@@ -39,6 +41,7 @@ func _build_panel() -> void:
 	_add_title_header()
 	_add_mode_panel()
 	_add_bottom_tabs()
+	_add_upgrade_pager_buttons()
 
 
 func _add_background() -> void:
@@ -100,21 +103,11 @@ func _add_mode_panel() -> void:
 	margin.add_child(panel)
 	var pad := _make_margin(24, 24, 20, 20)
 	panel.add_child(pad)
-	content_scroll = ScrollContainer.new()
-	content_scroll.name = "ForgeUpgradeScroll"
-	content_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	content_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	content_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	content_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	content_scroll.follow_focus = true
-	content_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
-	pad.add_child(content_scroll)
 	content_stack = VBoxContainer.new()
 	content_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content_stack.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	content_stack.add_theme_constant_override("separation", 12)
-	content_stack.gui_input.connect(_on_content_scroll_input)
-	content_scroll.add_child(content_stack)
+	pad.add_child(content_stack)
 
 
 func _add_bottom_tabs() -> void:
@@ -177,19 +170,32 @@ func _refresh() -> void:
 
 	match active_tab:
 		"Craft":
-			_add_description("Crafting is routed through permanent forge projects. Use Upgrades to spend Mana, Coins, and Spirit on stronger village systems.")
-		"Gear":
-			_add_description("Gear workbench: Flower Focus %d, Potion Gilding %d, Pond Resonance %d." % [
+			_add_description("Choose a forge path, then fund its permanent upgrade from the Upgrades tab.")
+			_add_forge_route_card(
+				"Production Craft",
+				"Flower Focus",
+				"Raises Flower Grove Mana/sec so fairy gatherers have a stronger base.",
 				GameState.forge_flower_focus_level,
-				GameState.forge_potion_gilding_level,
-				GameState.forge_pond_resonance_level
-			])
+				"Open Upgrades to forge Flower Focus."
+			)
+		"Gear":
+			_add_description("Current forged gear bonuses.")
+			_add_forge_status_board()
 		"Enhance":
-			_add_description("Enhance existing buildings with forged upgrades. Each completed project raises the Forge Level and improves another building.")
+			_add_description("Enhance village systems by finishing forge projects.")
+			_add_forge_route_card(
+				"Best Next Project",
+				_get_next_forge_project_title(),
+				_get_next_forge_project_hint(),
+				_get_next_forge_project_level(),
+				_get_next_forge_project_cost()
+			)
 		_:
 			_add_description("Spend resources on permanent upgrades that improve existing buildings.")
-			for upgrade_id in UPGRADE_IDS:
-				content_stack.add_child(_make_upgrade_card(GameState.get_forge_upgrade_data(upgrade_id)))
+			current_upgrade_index = clampi(current_upgrade_index, 0, UPGRADE_IDS.size() - 1)
+			_add_page_indicator(current_upgrade_index + 1, UPGRADE_IDS.size(), Color("#82d9ff"))
+			var upgrade_id := String(UPGRADE_IDS[current_upgrade_index])
+			content_stack.add_child(_make_upgrade_card(GameState.get_forge_upgrade_data(upgrade_id)))
 
 	feedback_label = _make_label("", 24, Color("#82d9ff"), HORIZONTAL_ALIGNMENT_CENTER)
 	content_stack.add_child(feedback_label)
@@ -197,12 +203,98 @@ func _refresh() -> void:
 	for tab_name in card_buttons.keys():
 		var border := (card_buttons[tab_name] as Control).get_node("ActiveBorder") as PanelContainer
 		border.visible = tab_name == active_tab
+	var show_pager := active_tab == "Upgrades" and UPGRADE_IDS.size() > 1
+	previous_upgrade_button.visible = show_pager
+	next_upgrade_button.visible = show_pager
 
 
 func _add_description(text: String) -> void:
 	var label := _make_label(text, 24, Color("#fff2c6"), HORIZONTAL_ALIGNMENT_CENTER)
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	content_stack.add_child(label)
+
+
+func _add_page_indicator(current_page: int, page_count: int, color: Color) -> void:
+	var label := _make_label("%d / %d" % [current_page, page_count], 18, color, HORIZONTAL_ALIGNMENT_CENTER)
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	content_stack.add_child(label)
+
+
+func _add_forge_status_board() -> void:
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", _make_panel_style(Color(0.016, 0.026, 0.036, 0.90), Color("#82d9ff"), 2, 10))
+	var margin := _make_margin(16, 16, 12, 12)
+	card.add_child(margin)
+	var rows := VBoxContainer.new()
+	rows.add_theme_constant_override("separation", 8)
+	margin.add_child(rows)
+	rows.add_child(_make_forge_status_row("Flower Focus", "Flower Grove Mana/sec", GameState.forge_flower_focus_level, GameState.get_flower_base_production_rate()))
+	rows.add_child(_make_forge_status_row("Potion Gilding", "Mana Potion value", GameState.forge_potion_gilding_level, GameState.get_potion_sell_value()))
+	rows.add_child(_make_forge_status_row("Pond Resonance", "Pond restore cost", GameState.forge_pond_resonance_level, GameState.sacred_pond_restore_cost))
+	content_stack.add_child(card)
+
+
+func _make_forge_status_row(title_text: String, detail: String, level: int, value) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	var title := _make_label("%s  Lv %d / 3" % [title_text, level], 18, Color("#fff2c6"))
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(title)
+	var detail_label := _make_label("%s: %s" % [detail, str(value)], 16, Color("#d9f1ff"), HORIZONTAL_ALIGNMENT_RIGHT)
+	detail_label.custom_minimum_size = Vector2(260, 1)
+	row.add_child(detail_label)
+	return row
+
+
+func _add_forge_route_card(kicker: String, title_text: String, body_text: String, level: int, footer_text: String) -> void:
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", _make_panel_style(Color(0.018, 0.020, 0.030, 0.90), Color("#8d6a33"), 2, 10))
+	var margin := _make_margin(16, 16, 12, 12)
+	card.add_child(margin)
+	var stack := VBoxContainer.new()
+	stack.add_theme_constant_override("separation", 6)
+	margin.add_child(stack)
+	stack.add_child(_make_label(kicker.to_upper(), 14, Color("#82d9ff"), HORIZONTAL_ALIGNMENT_CENTER))
+	stack.add_child(_make_label("%s  Level %d / 3" % [title_text, level], 22, Color("#fff2c6"), HORIZONTAL_ALIGNMENT_CENTER))
+	var body := _make_label(body_text, 17, Color("#e8dfca"), HORIZONTAL_ALIGNMENT_CENTER)
+	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	stack.add_child(body)
+	stack.add_child(_make_label(footer_text, 16, Color("#f3d57a"), HORIZONTAL_ALIGNMENT_CENTER))
+	content_stack.add_child(card)
+
+
+func _get_next_forge_project_title() -> String:
+	var best := _get_next_forge_upgrade()
+	return String(best.get("Title", "All Projects Complete"))
+
+
+func _get_next_forge_project_hint() -> String:
+	var best := _get_next_forge_upgrade()
+	if best.is_empty():
+		return "Every forge path is maxed. Future systems can build on this mastered forge."
+	return String(best.get("Description", "Finish another forge project to strengthen the grove."))
+
+
+func _get_next_forge_project_level() -> int:
+	return int(_get_next_forge_upgrade().get("Level", 3))
+
+
+func _get_next_forge_project_cost() -> String:
+	var best := _get_next_forge_upgrade()
+	if best.is_empty():
+		return "No active forge cost."
+	return "Needs %s." % _format_upgrade_cost(best)
+
+
+func _get_next_forge_upgrade() -> Dictionary:
+	var best: Dictionary = {}
+	var lowest_level := 999
+	for upgrade in GameState.get_forge_upgrades():
+		var level := int(upgrade.get("Level", 0))
+		if level < int(upgrade.get("MaxLevel", 3)) and level < lowest_level:
+			lowest_level = level
+			best = upgrade
+	return best
 
 
 func _make_upgrade_card(upgrade: Dictionary) -> PanelContainer:
@@ -213,8 +305,6 @@ func _make_upgrade_card(upgrade: Dictionary) -> PanelContainer:
 	var is_maxed := level >= max_level
 	var can_forge := _can_purchase_upgrade(upgrade)
 	card.name = "ForgeUpgradeCard_%s" % upgrade_id
-	card.mouse_filter = Control.MOUSE_FILTER_PASS
-	card.gui_input.connect(_on_content_scroll_input)
 	card.add_theme_stylebox_override("panel", _make_upgrade_card_style(can_forge, is_maxed))
 	var margin := _make_margin(16, 16, 12, 12)
 	card.add_child(margin)
@@ -368,6 +458,44 @@ func _on_upgrade_pressed(upgrade_id: String) -> void:
 	var result: Dictionary = GameState.purchase_forge_upgrade(upgrade_id)
 	if feedback_label:
 		feedback_label.text = String(result.get("Message", ""))
+		_refresh()
+
+
+func _add_upgrade_pager_buttons() -> void:
+	previous_upgrade_button = _make_pager_button("^")
+	previous_upgrade_button.position = Vector2(435, 1110)
+	previous_upgrade_button.pressed.connect(_on_previous_upgrade_pressed)
+	add_child(previous_upgrade_button)
+
+	next_upgrade_button = _make_pager_button("v")
+	next_upgrade_button.position = Vector2(435, 1436)
+	next_upgrade_button.pressed.connect(_on_next_upgrade_pressed)
+	add_child(next_upgrade_button)
+
+
+func _make_pager_button(text: String) -> Button:
+	var button := _make_button(text)
+	button.size = Vector2(210, 52)
+	button.custom_minimum_size = Vector2(210, 52)
+	button.z_index = 80
+	button.mouse_filter = Control.MOUSE_FILTER_STOP
+	button.focus_mode = Control.FOCUS_NONE
+	return button
+
+
+func _on_previous_upgrade_pressed() -> void:
+	_change_upgrade_page(-1)
+
+
+func _on_next_upgrade_pressed() -> void:
+	_change_upgrade_page(1)
+
+
+func _change_upgrade_page(direction: int) -> void:
+	SoundManager.play_click()
+	if UPGRADE_IDS.is_empty():
+		return
+	current_upgrade_index = (current_upgrade_index + direction + UPGRADE_IDS.size()) % UPGRADE_IDS.size()
 	_refresh()
 
 
@@ -377,20 +505,9 @@ func _on_back_pressed() -> void:
 	closed.emit()
 
 
-func _on_content_scroll_input(event: InputEvent) -> void:
-	if content_scroll == null:
-		return
-	if event is InputEventMouseButton and event.pressed:
-		if event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			content_scroll.scroll_vertical += 90
-			get_viewport().set_input_as_handled()
-		elif event.button_index == MOUSE_BUTTON_WHEEL_UP:
-			content_scroll.scroll_vertical = maxi(0, content_scroll.scroll_vertical - 90)
-			get_viewport().set_input_as_handled()
-
-
 func _clear_content() -> void:
 	for child in content_stack.get_children():
+		content_stack.remove_child(child)
 		child.queue_free()
 
 

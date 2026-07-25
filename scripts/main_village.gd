@@ -524,6 +524,12 @@ func _pond_decoration_sprite_path(decoration_name: String) -> String:
 		return "res://assets/sprites/environment/reed_cluster.png"
 	if decoration_name == "Willow Arch":
 		return "res://assets/sprites/environment/willow_arch.png"
+	if decoration_name == "Gold Koi":
+		return "res://assets/sprites/characters/koi_gold.png"
+	if decoration_name == "Blue Koi":
+		return "res://assets/sprites/characters/koi_blue.png"
+	if decoration_name == "Pink Koi":
+		return "res://assets/sprites/characters/koi_pink.png"
 	return "res://assets/sprites/environment/bloom_lilypad.png"
 
 
@@ -552,6 +558,12 @@ func _pond_decoration_world_size(decoration_name: String) -> Vector2:
 		return Vector2(54, 78)
 	if decoration_name == "Willow Arch":
 		return Vector2(68, 80)
+	if decoration_name == "Gold Koi":
+		return Vector2(58, 40)
+	if decoration_name == "Blue Koi":
+		return Vector2(54, 38)
+	if decoration_name == "Pink Koi":
+		return Vector2(56, 40)
 	return Vector2(46, 46)
 
 

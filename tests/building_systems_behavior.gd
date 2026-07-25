@@ -70,22 +70,27 @@ func _verify_ancient_tree(state: Node) -> void:
 	state.total_mana = 200
 	var restored: Dictionary = state.restore_ancient_tree()
 	if not bool(restored.get("Success", false)):
-		fail("Ancient Tree restore should succeed with enough mana")
-	if state.total_mana != 125:
-		fail("Ancient Tree restore should spend 75 mana")
-	if state.grove_restoration != 25:
-		fail("Ancient Tree restore should add 10 restoration")
+		fail("Ancient Tree watering should succeed while water uses remain")
+	if state.ancient_tree_growth != 25:
+		fail("Ancient Tree watering should add 10 growth")
 	if state.ancient_tree_level != 2:
-		fail("Ancient Tree level should update at 25 restoration")
+		fail("Ancient Tree level should update at 25 growth")
+	if int(restored.get("RemainingWaters", -1)) != 2:
+		fail("Ancient Tree watering should track remaining daily waters")
+	if String(restored.get("RewardText", "")).is_empty():
+		fail("Ancient Tree watering should award a nurture reward")
+	if not state.is_quest_completed("awaken_roots"):
+		fail("Awaken Roots quest should complete after restoring Ancient Tree")
 	if state.get_next_ancient_tree_reward_text() != "Level 2 reward ready":
 		fail("Next Ancient Tree reward text should show ready reward")
 
+	var mana_before_claim: int = state.total_mana
 	var claimed: Dictionary = state.claim_ancient_tree_reward(2)
 	if not bool(claimed.get("Success", false)):
 		fail("Ancient Tree level 2 reward should be claimable")
 	if state.ancient_tree_claimed_rewards.size() != 1:
 		fail("Ancient Tree claimed reward should persist in list")
-	if state.total_mana != 150:
+	if state.total_mana != mana_before_claim + 25:
 		fail("Ancient Tree level 2 reward should grant 25 mana")
 	if bool(state.claim_ancient_tree_reward(2).get("Success", false)):
 		fail("Ancient Tree reward should not be claimable twice")

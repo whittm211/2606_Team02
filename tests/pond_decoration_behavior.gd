@@ -8,8 +8,8 @@ func _init() -> void:
 		fail("Pond beauty should start at 0")
 	if state.get_pond_decoration_restore_bonus() != 0:
 		fail("Decoration bonus should start at 0")
-	if state.pond_decorations.size() != 12:
-		fail("Expected twelve starting pond decorations")
+	if state.pond_decorations.size() != 15:
+		fail("Expected fifteen starting pond decorations")
 	if state.pond_decoration_slots.size() != 6:
 		fail("Expected six preset decoration slots")
 

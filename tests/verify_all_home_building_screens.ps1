@@ -25,8 +25,6 @@ $requiredMainVillageText = @(
     "_open_ancient_tree",
     "_open_arcane_forge",
     "_open_market_stall",
-    "_add_placeholder_area_button(`"Ancient Tree`"",
-    "_add_placeholder_area_button(`"Market Stall`"",
     "_show_panel(AncientTreePanelScene.instantiate())",
     "_show_panel(ArcaneForgePanelScene.instantiate())",
     "_show_panel(MarketStallPanelScene.instantiate())"
@@ -36,6 +34,14 @@ foreach ($text in $requiredMainVillageText) {
     if (-not $mainVillage.Contains($text)) {
         throw "main_village.gd is missing: $text"
     }
+}
+
+if (-not ($mainVillage.Contains("_add_placeholder_area_button(`"Ancient Tree`"") -or $mainVillage.Contains("_add_landmark_hit_button(`"Ancient Tree`""))) {
+    throw "main_village.gd is missing an Ancient Tree hit button"
+}
+
+if (-not ($mainVillage.Contains("_add_placeholder_area_button(`"Market Stall`"") -or $mainVillage.Contains("_add_area_button(`"Market Stall`""))) {
+    throw "main_village.gd is missing a Market Stall hit button"
 }
 
 $requiredBuildingsText = @(

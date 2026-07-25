@@ -62,3 +62,11 @@ macOS exports require Godot export templates. If the export command fails with a
 ```bash
 ./tools/run_playtest.sh export-macos
 ```
+
+## Team Notes
+
+Team name: Byte Me
+
+Members: Jilden, Kimberly, Turbo, Cole, and Cody
+
+Plan: Make an idle app about fairies and koi fish. Fairies collect mana online and offline, and mana is the main currency in the game.

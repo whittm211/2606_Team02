@@ -3,14 +3,43 @@ extends PanelContainer
 signal closed
 
 var feedback_label: Label
+var status_label: Label
 var location_list: VBoxContainer
 var selected_location_id: String = ""
-var location_cards: Dictionary = {}
+var last_ready_state: bool = false
+var last_active_state: bool = false
 
 func _ready() -> void:
 	self_modulate = Color(0.015, 0.02, 0.04, 0.94)
 	_build_ui()
 	GameState.resources_changed.connect(_refresh_locations)
+
+
+func _process(_delta: float) -> void:
+	_update_status_text()
+
+	var ready_now := GameState.is_exploration_ready()
+	var active_now := GameState.exploration_active
+	if ready_now != last_ready_state or active_now != last_active_state:
+		last_ready_state = ready_now
+		last_active_state = active_now
+		_refresh_locations()
+
+
+func _update_status_text() -> void:
+	if status_label == null:
+		return
+	if not GameState.exploration_active:
+		status_label.text = "No fairies are out exploring."
+		status_label.add_theme_color_override("font_color", Color("#c9b78a"))
+		return
+	if GameState.is_exploration_ready():
+		status_label.text = "%s complete! Collect your reward." % GameState.get_active_exploration_name()
+		status_label.add_theme_color_override("font_color", Color("#9fe0a0"))
+		return
+	var seconds := GameState.get_exploration_time_remaining()
+	status_label.text = "Exploring %s - %02d:%02d remaining" % [GameState.get_active_exploration_name(), seconds / 60, seconds % 60]
+	status_label.add_theme_color_override("font_color", Color("#f5d66f"))
 
 
 func _build_ui() -> void:
@@ -23,28 +52,32 @@ func _build_ui() -> void:
 	add_child(margin)
 
 	var layout := VBoxContainer.new()
-	layout.add_theme_constant_override("separation", 24)
+	layout.add_theme_constant_override("separation", 22)
 	margin.add_child(layout)
 
 	var title := _make_label("Explore", 48, Color("#f5d66f"))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	layout.add_child(title)
 
-	var description := _make_label("Send fairies beyond the grove to discover resources and hidden magic.", 30, Color("#fff2d6"))
+	var description := _make_label("Send fairies beyond the grove to discover resources and hidden magic.", 28, Color("#fff2d6"))
 	description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	description.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	layout.add_child(description)
 
+	status_label = _make_label("", 28, Color("#f5d66f"))
+	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	layout.add_child(status_label)
+
 	location_list = VBoxContainer.new()
-	location_list.add_theme_constant_override("separation", 18)
+	location_list.add_theme_constant_override("separation", 16)
 	layout.add_child(location_list)
 
-	feedback_label = _make_label("", 28, Color("#f5d66f"))
+	feedback_label = _make_label("", 26, Color("#f5d66f"))
 	feedback_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	layout.add_child(feedback_label)
 
 	var spacer := Control.new()
-	spacer.custom_minimum_size = Vector2(1, 40)
+	spacer.custom_minimum_size = Vector2(1, 30)
 	layout.add_child(spacer)
 
 	var button_row := HBoxContainer.new()
@@ -60,19 +93,48 @@ func _build_ui() -> void:
 	back_button.pressed.connect(func(): SoundManager.play_click(); closed.emit())
 	button_row.add_child(back_button)
 
+	_update_status_text()
 	_refresh_locations()
 
 
 func _refresh_locations() -> void:
+	if location_list == null:
+		return
 	for child in location_list.get_children():
 		child.queue_free()
-	location_cards.clear()
+
+	if GameState.is_exploration_ready():
+		location_list.add_child(_make_collect_card())
+		return
 
 	for data in GameState.get_exploration_locations():
-		var location_id := String(data.get("LocationID", ""))
-		var card := _make_location_card(data)
-		location_list.add_child(card)
-		location_cards[location_id] = card
+		location_list.add_child(_make_location_card(data))
+
+
+func _make_collect_card() -> PanelContainer:
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", _make_style(Color(0.03, 0.05, 0.04, 0.9), Color("#9fe0a0"), 3, 10))
+
+	var card_margin := MarginContainer.new()
+	card_margin.add_theme_constant_override("margin_left", 26)
+	card_margin.add_theme_constant_override("margin_right", 26)
+	card_margin.add_theme_constant_override("margin_top", 20)
+	card_margin.add_theme_constant_override("margin_bottom", 20)
+	card.add_child(card_margin)
+
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 12)
+	card_margin.add_child(col)
+
+	col.add_child(_make_label("The fairies have returned!", 30, Color("#9fe0a0")))
+	col.add_child(_make_label("Collect your reward to send them out again.", 24, Color("#e8dfca")))
+
+	var collect_button := _make_small_button("Collect Reward")
+	collect_button.custom_minimum_size = Vector2(260, 58)
+	collect_button.pressed.connect(_on_collect_pressed)
+	col.add_child(collect_button)
+
+	return card
 
 
 func _make_location_card(data: Dictionary) -> PanelContainer:
@@ -90,8 +152,8 @@ func _make_location_card(data: Dictionary) -> PanelContainer:
 	var card_margin := MarginContainer.new()
 	card_margin.add_theme_constant_override("margin_left", 26)
 	card_margin.add_theme_constant_override("margin_right", 26)
-	card_margin.add_theme_constant_override("margin_top", 18)
-	card_margin.add_theme_constant_override("margin_bottom", 18)
+	card_margin.add_theme_constant_override("margin_top", 16)
+	card_margin.add_theme_constant_override("margin_bottom", 16)
 	card.add_child(card_margin)
 
 	var col := VBoxContainer.new()
@@ -101,7 +163,7 @@ func _make_location_card(data: Dictionary) -> PanelContainer:
 	var name_color := Color("#fff2a8")
 	if not unlocked:
 		name_color = Color("#8f8a7c")
-	col.add_child(_make_label(String(data.get("Name", "Location")), 32, name_color))
+	col.add_child(_make_label(String(data.get("Name", "Location")), 30, name_color))
 
 	if unlocked:
 		var minutes := int(data.get("DurationSeconds", 0)) / 60
@@ -110,29 +172,44 @@ func _make_location_card(data: Dictionary) -> PanelContainer:
 		var reward_text := "%d Coins" % reward_min
 		if reward_max != reward_min:
 			reward_text = "%d-%d Coins" % [reward_min, reward_max]
-		col.add_child(_make_label("Cost: %d Mana   Time: %d min   Reward: %s" % [int(data.get("CostMana", 0)), minutes, reward_text], 24, Color("#e8dfca")))
-		var tap_button := _make_small_button("Select" if not is_selected else "Selected")
-		tap_button.disabled = is_selected
-		tap_button.pressed.connect(func() -> void:
-			SoundManager.play_click()
-			selected_location_id = location_id
-			feedback_label.text = "%s selected." % String(data.get("Name", "Location"))
-			_refresh_locations()
-		)
-		col.add_child(tap_button)
+		col.add_child(_make_label("Cost: %d Mana   Time: %d min   Reward: %s" % [int(data.get("CostMana", 0)), minutes, reward_text], 22, Color("#e8dfca")))
+
+		if GameState.exploration_active:
+			col.add_child(_make_label("Fairies are already out.", 22, Color("#c9b78a")))
+		else:
+			var tap_button := _make_small_button("Selected" if is_selected else "Select")
+			tap_button.disabled = is_selected
+			tap_button.pressed.connect(func() -> void:
+				SoundManager.play_click()
+				selected_location_id = location_id
+				feedback_label.text = "%s selected." % String(data.get("Name", "Location"))
+				_refresh_locations()
+			)
+			col.add_child(tap_button)
 	else:
-		col.add_child(_make_label("Locked - reach level %d in Flower Grove and Potion Shop." % int(data.get("UnlockLevel", 0)), 24, Color("#c9a86a")))
+		col.add_child(_make_label("Locked - reach level %d in Flower Grove and Potion Shop." % int(data.get("UnlockLevel", 0)), 22, Color("#c9a86a")))
 
 	return card
 
 
 func _on_begin_pressed() -> void:
 	SoundManager.play_click()
+	if GameState.exploration_active:
+		feedback_label.text = "An exploration is already underway."
+		return
 	if selected_location_id == "":
 		feedback_label.text = "Select a location first."
 		return
 	var result := GameState.start_exploration(selected_location_id)
 	feedback_label.text = String(result.get("Message", ""))
+	_refresh_locations()
+
+
+func _on_collect_pressed() -> void:
+	SoundManager.play_collect()
+	var result := GameState.claim_exploration_reward()
+	feedback_label.text = String(result.get("Message", ""))
+	selected_location_id = ""
 	_refresh_locations()
 
 
